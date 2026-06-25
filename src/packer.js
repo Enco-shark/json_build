@@ -5,6 +5,7 @@ const { ProgressBar, Spinner } = require('./progress');
 const {
   isTextFile,
   formatSize,
+  formatTime,
   readFileAsStream,
   getFileInfo,
 } = require('./utils');
@@ -229,13 +230,4 @@ async function processFile(file) {
   };
 }
 
-// 格式化时间
-function formatTime(ms) {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  if (minutes === 0) return `${seconds}s`;
-  return `${minutes}m ${seconds % 60}s`;
-}
-
-module.exports = { pack };
+module.exports = { pack, scanDirectory };
