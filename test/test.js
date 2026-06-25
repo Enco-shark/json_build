@@ -95,36 +95,38 @@ async function testIgnoreFilter() {
   });
 
   await test('目录规则（以 / 结尾）只匹配目录', () => {
+    // 使用不与默认规则冲突的名字
     const filter = new IgnoreFilter({
       projectRoot: TEST_DIR,
       loadGitignore: false,
-      customRules: ['build/'],
+      customRules: ['onlydir/'],
     });
-    assert.strictEqual(filter.shouldIgnore('build', true), true);
-    // build 作为文件不应被目录规则忽略
-    assert.strictEqual(filter.shouldIgnore('build', false), false);
+    assert.strictEqual(filter.shouldIgnore('onlydir', true), true);
+    // onlydir 作为文件不应被目录规则忽略
+    assert.strictEqual(filter.shouldIgnore('onlydir', false), false);
   });
 
   await test('前导斜杠锚定到根目录', () => {
+    // 使用不与默认规则冲突的名字
     const filter = new IgnoreFilter({
       projectRoot: TEST_DIR,
       loadGitignore: false,
-      customRules: ['/dist'],
+      customRules: ['/anchoreddir'],
     });
-    assert.strictEqual(filter.shouldIgnore('dist', true), true);
-    // 子目录中的 dist 不应被根锚定规则匹配
-    assert.strictEqual(filter.shouldIgnore('src/dist', true), false);
+    assert.strictEqual(filter.shouldIgnore('anchoreddir', true), true);
+    // 子目录中的 anchoreddir 不应被根锚定规则匹配
+    assert.strictEqual(filter.shouldIgnore('src/anchoreddir', true), false);
   });
 
   await test('** 通配跨目录匹配', () => {
     const filter = new IgnoreFilter({
       projectRoot: TEST_DIR,
       loadGitignore: false,
-      customRules: ['**/cache'],
+      customRules: ['**/cachespecial'],
     });
-    assert.strictEqual(filter.shouldIgnore('cache', true), true);
-    assert.strictEqual(filter.shouldIgnore('a/cache', true), true);
-    assert.strictEqual(filter.shouldIgnore('a/b/cache', true), true);
+    assert.strictEqual(filter.shouldIgnore('cachespecial', true), true);
+    assert.strictEqual(filter.shouldIgnore('a/cachespecial', true), true);
+    assert.strictEqual(filter.shouldIgnore('a/b/cachespecial', true), true);
   });
 }
 
