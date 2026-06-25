@@ -141,7 +141,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useSettings } from '../composables/useSettings'
 
 const { settings } = useSettings()
@@ -176,12 +176,35 @@ const canPack = computed(() => {
 })
 
 function formatSize(bytes) {
-  if (bytes === 0) return '0 B'
+  if (!bytes || bytes <= 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
+
+// 进度事件取消订阅函数
+let unsubPackProgress = null
+let unsubScanProgress = null
+
+onMounted(() => {
+  // 监听扫描进度
+  unsubScanProgress = window.electronAPI.onPackScanProgress((info) => {
+    statusText.value = `正在扫描: ${info.current} (已发现 ${info.scanned} 个)`
+  })
+
+  // 监听打包进度
+  unsubPackProgress = window.electronAPI.onPackProgress((info) => {
+    const pct = info.total > 0 ? Math.round((info.current / info.total) * 100) : 0
+    progress.value = pct
+    statusText.value = `正在打包 [${info.current}/${info.total}] ${info.file}`
+  })
+})
+
+onBeforeUnmount(() => {
+  if (unsubPackProgress) unsubPackProgress()
+  if (unsubScanProgress) unsubScanProgress()
+})
 
 async function selectSource() {
   const path = await window.electronAPI.selectDirectory()
@@ -190,6 +213,11 @@ async function selectSource() {
     outputPath.value = path + '.json'
     previewFiles.value = []
     result.value = null
+
+    // 实现自动扫描设置
+    if (settings.autoScan) {
+      await scanDirectory()
+    }
   }
 }
 
@@ -212,11 +240,13 @@ async function scanDirectory() {
   result.value = null
 
   try {
-    const scanResult = await window.electronAPI.scanDirectory(sourcePath.value)
+    // 传递 maxSize 给扫描接口，保持与打包一致
+    const scanResult = await window.electronAPI.scanDirectory(sourcePath.value, maxSize.value)
 
     if (scanResult.success) {
       previewFiles.value = scanResult.files
       totalSize.value = scanResult.totalSize
+      statusText.value = `扫描完成: ${scanResult.files.length} 个文件`
     } else {
       result.value = { success: false, error: scanResult.error }
     }
@@ -232,15 +262,8 @@ async function startPack() {
 
   loading.value = true
   progress.value = 0
-  statusText.value = '正在打包...'
+  statusText.value = '准备打包...'
   result.value = null
-
-  // 模拟进度
-  const progressInterval = setInterval(() => {
-    if (progress.value < 90) {
-      progress.value += Math.random() * 10
-    }
-  }, 200)
 
   try {
     const packResult = await window.electronAPI.pack({
@@ -250,12 +273,10 @@ async function startPack() {
       maxSize: maxSize.value,
     })
 
-    clearInterval(progressInterval)
     progress.value = 100
-    statusText.value = '打包完成'
+    statusText.value = packResult.success ? '打包完成' : '打包失败'
     result.value = packResult
   } catch (error) {
-    clearInterval(progressInterval)
     result.value = { success: false, error: error.message }
   } finally {
     setTimeout(() => {

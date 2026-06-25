@@ -3,6 +3,10 @@
   "version": "1.1.0",
   "description": "A CLI/GUI tool to pack project files into JSON and rebuild from JSON",
   "main": "electron/main.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "json-build": "./bin/cli.js"
   },

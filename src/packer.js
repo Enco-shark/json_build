@@ -148,7 +148,7 @@ async function pack(targetPath, options = {}) {
 }
 
 // 递归扫描目录
-async function scanDirectory(basePath, currentPath, ignoreFilter, files, errors, maxSize) {
+async function scanDirectory(basePath, currentPath, ignoreFilter, files, errors, maxSize, onScanProgress) {
   let entries;
 
   try {
@@ -175,7 +175,7 @@ async function scanDirectory(basePath, currentPath, ignoreFilter, files, errors,
 
     if (entry.isDirectory()) {
       // 递归扫描子目录
-      await scanDirectory(basePath, fullPath, ignoreFilter, files, errors, maxSize);
+      await scanDirectory(basePath, fullPath, ignoreFilter, files, errors, maxSize, onScanProgress);
     } else if (entry.isFile()) {
       try {
         const stat = await fs.promises.stat(fullPath);
@@ -198,6 +198,14 @@ async function scanDirectory(basePath, currentPath, ignoreFilter, files, errors,
           ctime: stat.ctimeMs,
           mode: stat.mode,
         });
+
+        // 通知扫描进度
+        if (onScanProgress) {
+          onScanProgress({
+            scanned: files.length,
+            current: relativePath,
+          });
+        }
       } catch (err) {
         errors.push({
           path: fullPath,

@@ -149,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useSettings } from '../composables/useSettings'
 
 const { settings } = useSettings()
@@ -172,10 +172,10 @@ const canRebuild = computed(() => {
 })
 
 function formatSize(bytes) {
-  if (bytes === 0) return '0 B'
+  if (!bytes || bytes <= 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
@@ -184,6 +184,21 @@ function formatDate(dateStr) {
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN')
 }
+
+// 进度事件取消订阅函数
+let unsubRebuildProgress = null
+
+onMounted(() => {
+  unsubRebuildProgress = window.electronAPI.onRebuildProgress((info) => {
+    const pct = info.total > 0 ? Math.round((info.current / info.total) * 100) : 0
+    progress.value = pct
+    statusText.value = `正在解包 [${info.current}/${info.total}] ${info.file}`
+  })
+})
+
+onBeforeUnmount(() => {
+  if (unsubRebuildProgress) unsubRebuildProgress()
+})
 
 async function selectJson() {
   const path = await window.electronAPI.selectFile([
@@ -231,15 +246,8 @@ async function startRebuild() {
 
   loading.value = true
   progress.value = 0
-  statusText.value = '正在解包...'
+  statusText.value = '准备解包...'
   result.value = null
-
-  // 模拟进度
-  const progressInterval = setInterval(() => {
-    if (progress.value < 90) {
-      progress.value += Math.random() * 10
-    }
-  }, 200)
 
   try {
     const rebuildResult = await window.electronAPI.rebuild({
@@ -248,12 +256,10 @@ async function startRebuild() {
       timestamps: restoreTimestamps.value,
     })
 
-    clearInterval(progressInterval)
     progress.value = 100
-    statusText.value = '解包完成'
+    statusText.value = rebuildResult.success ? '解包完成' : '解包失败'
     result.value = rebuildResult
   } catch (error) {
-    clearInterval(progressInterval)
     result.value = { success: false, error: error.message }
   } finally {
     setTimeout(() => {
