@@ -62,16 +62,26 @@ async function rebuild(jsonPath, options = {}) {
     throw new Error('无效的JSON结构: 缺少必要的字段');
   }
 
-  // 确定目标目录
-  let destPath = options.dest || process.cwd();
+  // 确定目标目录：统一行为，总是在目标目录下创建 source 子目录
+  // 这样保持与原项目目录结构一致，避免污染目标目录
+  const baseDestPath = options.dest || process.cwd();
+  const baseDestResolved = path.resolve(baseDestPath);
+  let destPath = baseDestResolved;
 
-  // 如果指定了源目录名，创建子目录
-  if (structure.source && options.dest) {
-    destPath = path.join(options.dest, structure.source);
+  if (structure.source) {
+    // 安全校验 source 字段，防止恶意 JSON 通过 source 字段进行路径遍历
+    // source 应为单个目录名，不含路径分隔符或 ..
+    const safeSource = isSafeRelativePath(structure.source);
+    if (!safeSource) {
+      throw new Error(`无效的 source 字段: "${structure.source}"（可能包含路径遍历字符）`);
+    }
+    destPath = path.join(baseDestResolved, structure.source);
   }
 
-  // 解析为绝对路径用于后续安全校验
-  destPath = path.resolve(destPath);
+  // 二次校验：destPath 必须在 baseDestPath 之下
+  if (destPath !== baseDestResolved && !destPath.startsWith(baseDestResolved + path.sep)) {
+    throw new Error('目标目录越界，可能存在路径遍历攻击');
+  }
 
   console.log(`  目标目录: ${destPath}`);
   console.log(`  文件数量: ${structure.files.length}`);

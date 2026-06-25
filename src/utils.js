@@ -155,7 +155,7 @@ function readFileAsStream(filePath) {
   });
 }
 
-// 安全写入文件（流式）
+// 安全写入文件（流式，正确处理背压）
 function writeFileAsStream(filePath, data) {
   return new Promise((resolve, reject) => {
     // 确保目录存在
@@ -165,8 +165,8 @@ function writeFileAsStream(filePath, data) {
     }
 
     const stream = fs.createWriteStream(filePath);
-    stream.write(data);
-    stream.end();
+    // stream.end(data) 写入最后一块数据并关闭，内部处理背压
+    stream.end(data);
     stream.on('finish', resolve);
     stream.on('error', reject);
   });

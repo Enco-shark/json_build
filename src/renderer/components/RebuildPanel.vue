@@ -100,8 +100,8 @@
               <span class="file-size">{{ formatSize(file.size) }}</span>
               <span class="file-encoding">{{ file.encoding }}</span>
             </div>
-            <div v-if="jsonInfo.files.length > 100" class="file-more">
-              ... 还有 {{ jsonInfo.files.length - 100 }} 个文件
+            <div v-if="jsonInfo.filesTruncated || jsonInfo.files.length > 100" class="file-more">
+              ... 显示前 {{ Math.min(jsonInfo.files.length, 100) }} 个，共 {{ jsonInfo.filesTotal || jsonInfo.fileCount }} 个文件
             </div>
           </div>
         </div>

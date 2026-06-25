@@ -89,32 +89,43 @@ class IgnoreFilter {
   constructor(options = {}) {
     this.rules = [];
     this.projectRoot = options.projectRoot || process.cwd();
+    this.options = options;
 
-    // 添加默认规则
+    // 添加默认规则（同步，纯内存操作）
     this.addRules(DEFAULT_IGNORES);
 
-    // 读取 .gitignore 文件
-    if (options.loadGitignore !== false) {
-      this.loadGitignore();
-    }
-
-    // 添加自定义规则
+    // 添加自定义规则（同步，无需文件 I/O）
+    // 注意：构造函数不会加载 .gitignore，需使用静态 create() 方法
     if (options.customRules) {
       this.addRules(options.customRules);
     }
   }
 
-  // 从 .gitignore 加载规则
-  loadGitignore() {
+  // 异步工厂方法：避免在主进程中使用同步 fs 操作阻塞 UI
+  static async create(options = {}) {
+    const filter = new IgnoreFilter(options);
+
+    // 异步读取 .gitignore
+    if (options.loadGitignore !== false) {
+      await filter.loadGitignore();
+    }
+
+    return filter;
+  }
+
+  // 从 .gitignore 异步加载规则
+  async loadGitignore() {
     const gitignorePath = path.join(this.projectRoot, '.gitignore');
 
-    if (fs.existsSync(gitignorePath)) {
-      const content = fs.readFileSync(gitignorePath, 'utf-8');
+    try {
+      const content = await fs.promises.readFile(gitignorePath, 'utf-8');
       const lines = content.split('\n')
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('#'));
 
       this.addRules(lines);
+    } catch (_e) {
+      // .gitignore 不存在或不可读，忽略
     }
   }
 

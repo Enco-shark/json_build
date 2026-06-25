@@ -24,10 +24,12 @@ async function pack(targetPath, options = {}) {
   }
 
   const outputPath = options.output || path.join(process.cwd(), 'structure.json');
-  const maxSize = (options.maxSize || 50) * 1024 * 1024; // 转换为字节
+  // maxSize: undefined → 默认 50MB；0 → 不限制；正数 → 对应 MB
+  const maxSizeMB = options.maxSize ?? 50;
+  const maxSize = maxSizeMB > 0 ? maxSizeMB * 1024 * 1024 : 0;
 
   // 初始化忽略过滤器
-  const ignoreFilter = new IgnoreFilter({
+  const ignoreFilter = await IgnoreFilter.create({
     projectRoot: targetPath,
     customRules: options.ignore ? options.ignore.split(',') : [],
   });
@@ -35,7 +37,7 @@ async function pack(targetPath, options = {}) {
   console.log('\n  json-build pack\n');
   console.log(`  源目录: ${targetPath}`);
   console.log(`  输出文件: ${outputPath}`);
-  console.log(`  最大文件: ${formatSize(maxSize)}`);
+  console.log(`  最大文件: ${maxSize > 0 ? formatSize(maxSize) : '不限'}`);
   console.log('');
 
   // 第一阶段：扫描文件
@@ -76,7 +78,6 @@ async function pack(targetPath, options = {}) {
     version: '1.0.0',
     createdAt: new Date().toISOString(),
     source: path.basename(targetPath),
-    rootPath: targetPath,
     fileCount: files.length,
     totalSize: totalSize,
     files: [],
@@ -108,16 +109,14 @@ async function pack(targetPath, options = {}) {
 
   progressBar.done('文件读取完成');
 
-  // 第三阶段：写入JSON文件
+  // 第三阶段：流式写入JSON文件，避免一次性序列化导致内存翻倍
   const writeSpinner = new Spinner('正在写入JSON文件...');
   writeSpinner.start();
 
+  let outputSize;
   try {
-    const jsonContent = JSON.stringify(structure, null, 2);
-    await fs.promises.writeFile(outputPath, jsonContent, 'utf-8');
-
-    const outputStat = await fs.promises.stat(outputPath);
-    writeSpinner.succeed(`写入完成: ${formatSize(outputStat.size)}`);
+    outputSize = await writeJsonStream(outputPath, structure);
+    writeSpinner.succeed(`写入完成: ${formatSize(outputSize)}`);
   } catch (err) {
     writeSpinner.fail('写入失败');
     throw err;
@@ -129,9 +128,12 @@ async function pack(targetPath, options = {}) {
   console.log(`    文件数量: ${structure.files.length}`);
   console.log(`    原始大小: ${formatSize(totalSize)}`);
 
-  const outputSize = (await fs.promises.stat(outputPath)).size;
   console.log(`    JSON大小: ${formatSize(outputSize)}`);
-  console.log(`    压缩率:   ${((1 - outputSize / totalSize) * 100).toFixed(1)}%`);
+  // 全空项目 totalSize=0 时跳过压缩率计算
+  const ratioStr = totalSize > 0
+    ? `${((1 - outputSize / totalSize) * 100).toFixed(1)}%`
+    : 'N/A';
+  console.log(`    压缩率:   ${ratioStr}`);
   console.log(`    耗时:     ${formatTime(elapsed)}`);
 
   if (errors.length > 0) {
@@ -245,6 +247,55 @@ async function processFile(file) {
     },
     mode: file.mode,
   };
+}
+
+// 流式写入 JSON，避免一次性 JSON.stringify 导致内存翻倍
+// 正确处理写流背压，避免大项目时内存积压
+async function writeJsonStream(outputPath, structure) {
+  const stream = fs.createWriteStream(outputPath, 'utf-8');
+
+  // 写入一块数据，若返回 false 则等待 drain 事件（背压处理）
+  const write = (chunk) => new Promise((resolve, reject) => {
+    if (stream.write(chunk)) resolve();
+    else stream.once('drain', resolve);
+    // drain 期间若出错，stream error 事件会 reject 整个 Promise
+  });
+
+  return new Promise((resolve, reject) => {
+    stream.on('error', reject);
+    stream.on('finish', () => {
+      fs.stat(outputPath, (err, stat) => {
+        if (err) reject(err);
+        else resolve(stat.size);
+      });
+    });
+
+    (async () => {
+      try {
+        // 写入头部字段
+        await write('{\n');
+        await write(`  "version": ${JSON.stringify(structure.version)},\n`);
+        await write(`  "createdAt": ${JSON.stringify(structure.createdAt)},\n`);
+        await write(`  "source": ${JSON.stringify(structure.source)},\n`);
+        await write(`  "fileCount": ${structure.fileCount},\n`);
+        await write(`  "totalSize": ${structure.totalSize},\n`);
+
+        // 流式写入 files 数组，逐项序列化
+        await write('  "files": [\n');
+        for (let i = 0; i < structure.files.length; i++) {
+          const comma = i < structure.files.length - 1 ? ',' : '';
+          // 每个文件对象单独 stringify，避免全量驻留内存
+          await write('    ' + JSON.stringify(structure.files[i]) + comma + '\n');
+        }
+        await write('  ]\n}\n');
+
+        stream.end();
+      } catch (err) {
+        // 触发外层 error 事件
+        stream.destroy(err);
+      }
+    })();
+  });
 }
 
 module.exports = { pack, scanDirectory };

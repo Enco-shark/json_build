@@ -40,41 +40,41 @@ function test(name, fn) {
 async function testIgnoreFilter() {
   console.log('\n--- 测试 IgnoreFilter ---\n');
 
-  await test('默认规则忽略 node_modules', () => {
-    const filter = new IgnoreFilter({ projectRoot: TEST_DIR, loadGitignore: false });
+  await test('默认规则忽略 node_modules', async () => {
+    const filter = await IgnoreFilter.create({ projectRoot: TEST_DIR, loadGitignore: false });
     assert.strictEqual(filter.shouldIgnore('node_modules', true), true);
     assert.strictEqual(filter.shouldIgnore('node_modules/pkg/index.js'), true);
   });
 
-  await test('默认规则忽略 .git 目录', () => {
-    const filter = new IgnoreFilter({ projectRoot: TEST_DIR, loadGitignore: false });
+  await test('默认规则忽略 .git 目录', async () => {
+    const filter = await IgnoreFilter.create({ projectRoot: TEST_DIR, loadGitignore: false });
     assert.strictEqual(filter.shouldIgnore('.git', true), true);
     assert.strictEqual(filter.shouldIgnore('.git/HEAD'), true);
   });
 
-  await test('*.log 通配符匹配任意层级日志文件', () => {
-    const filter = new IgnoreFilter({ projectRoot: TEST_DIR, loadGitignore: false });
+  await test('*.log 通配符匹配任意层级日志文件', async () => {
+    const filter = await IgnoreFilter.create({ projectRoot: TEST_DIR, loadGitignore: false });
     assert.strictEqual(filter.shouldIgnore('app.log'), true);
     assert.strictEqual(filter.shouldIgnore('logs/app.log'), true);
     assert.strictEqual(filter.shouldIgnore('src/utils/debug.log'), true);
   });
 
-  await test('普通源代码文件不应被忽略', () => {
-    const filter = new IgnoreFilter({ projectRoot: TEST_DIR, loadGitignore: false });
+  await test('普通源代码文件不应被忽略', async () => {
+    const filter = await IgnoreFilter.create({ projectRoot: TEST_DIR, loadGitignore: false });
     assert.strictEqual(filter.shouldIgnore('src/index.js'), false);
     assert.strictEqual(filter.shouldIgnore('package.json'), false);
     assert.strictEqual(filter.shouldIgnore('README.md'), false);
   });
 
-  await test('根目录不被忽略', () => {
-    const filter = new IgnoreFilter({ projectRoot: TEST_DIR, loadGitignore: false });
+  await test('根目录不被忽略', async () => {
+    const filter = await IgnoreFilter.create({ projectRoot: TEST_DIR, loadGitignore: false });
     assert.strictEqual(filter.shouldIgnore('.', false), false);
     assert.strictEqual(filter.shouldIgnore('', false), false);
     assert.strictEqual(filter.shouldIgnore('/'), false);
   });
 
-  await test('自定义规则（逗号分隔字符串）', () => {
-    const filter = new IgnoreFilter({
+  await test('自定义规则（逗号分隔字符串）', async () => {
+    const filter = await IgnoreFilter.create({
       projectRoot: TEST_DIR,
       loadGitignore: false,
       customRules: 'foo,bar,*.baz',
@@ -84,8 +84,8 @@ async function testIgnoreFilter() {
     assert.strictEqual(filter.shouldIgnore('a.baz'), true);
   });
 
-  await test('取反规则 ! 取消忽略', () => {
-    const filter = new IgnoreFilter({
+  await test('取反规则 ! 取消忽略', async () => {
+    const filter = await IgnoreFilter.create({
       projectRoot: TEST_DIR,
       loadGitignore: false,
       customRules: ['*.log', '!important.log'],
@@ -94,9 +94,9 @@ async function testIgnoreFilter() {
     assert.strictEqual(filter.shouldIgnore('important.log'), false);
   });
 
-  await test('目录规则（以 / 结尾）只匹配目录', () => {
+  await test('目录规则（以 / 结尾）只匹配目录', async () => {
     // 使用不与默认规则冲突的名字
-    const filter = new IgnoreFilter({
+    const filter = await IgnoreFilter.create({
       projectRoot: TEST_DIR,
       loadGitignore: false,
       customRules: ['onlydir/'],
@@ -106,9 +106,9 @@ async function testIgnoreFilter() {
     assert.strictEqual(filter.shouldIgnore('onlydir', false), false);
   });
 
-  await test('前导斜杠锚定到根目录', () => {
+  await test('前导斜杠锚定到根目录', async () => {
     // 使用不与默认规则冲突的名字
-    const filter = new IgnoreFilter({
+    const filter = await IgnoreFilter.create({
       projectRoot: TEST_DIR,
       loadGitignore: false,
       customRules: ['/anchoreddir'],
@@ -118,8 +118,8 @@ async function testIgnoreFilter() {
     assert.strictEqual(filter.shouldIgnore('src/anchoreddir', true), false);
   });
 
-  await test('** 通配跨目录匹配', () => {
-    const filter = new IgnoreFilter({
+  await test('** 通配跨目录匹配', async () => {
+    const filter = await IgnoreFilter.create({
       projectRoot: TEST_DIR,
       loadGitignore: false,
       customRules: ['**/cachespecial'],
@@ -530,7 +530,55 @@ async function testPathTraversalProtection() {
     if (fs.existsSync(trapDir)) await fs.promises.rm(trapDir, { recursive: true });
   }
 
-  console.log('  ✓ 路径遍历被拦截\n');
+  console.log('  ✓ 文件路径遍历被拦截\n');
+
+  // 测试 source 字段路径遍历防护
+  await test('source 字段路径遍历被拒绝', async () => {
+    const sourceTraversalJson = {
+      version: '1.0.0',
+      createdAt: new Date().toISOString(),
+      source: '../../../evil-source',
+      fileCount: 1,
+      totalSize: 5,
+      files: [
+        {
+          path: 'innocent.txt',
+          content: 'data',
+          encoding: 'utf-8',
+          size: 4,
+        },
+      ],
+    };
+
+    const srcPath = path.join(__dirname, 'test-source-traversal.json');
+    await fs.promises.writeFile(srcPath, JSON.stringify(sourceTraversalJson));
+
+    const safeDir = path.join(__dirname, 'test-source-safe');
+    if (fs.existsSync(safeDir)) {
+      await fs.promises.rm(safeDir, { recursive: true });
+    }
+
+    try {
+      let threw = false;
+      try {
+        await rebuild(srcPath, { dest: safeDir, timestamps: false });
+      } catch (e) {
+        threw = true;
+        assert.ok(e.message.includes('source'), `错误信息应提及 source: ${e.message}`);
+      }
+      assert.strictEqual(threw, true, '恶意 source 字段应被拒绝');
+
+      // 校验 safeDir 之外没有写入
+      const escapeCheck = path.resolve(__dirname, '../../evil-source');
+      assert.strictEqual(fs.existsSync(escapeCheck), false, 'source 字段路径遍历导致外部目录被创建！');
+    } finally {
+      if (fs.existsSync(srcPath)) await fs.promises.unlink(srcPath);
+      if (fs.existsSync(safeDir)) await fs.promises.rm(safeDir, { recursive: true });
+      // 清理可能泄漏的目录
+      const escapeCheck = path.resolve(__dirname, '../../evil-source');
+      if (fs.existsSync(escapeCheck)) await fs.promises.rm(escapeCheck, { recursive: true });
+    }
+  });
 }
 
 // 清理测试文件

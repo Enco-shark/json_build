@@ -2,7 +2,7 @@
 
 一个 Node.js 命令行/GUI 工具，用于将项目文件夹打包成 JSON 文件，以及从 JSON 文件还原项目结构。
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D16.0.0-brightgreen)
 [![GitHub](https://img.shields.io/badge/GitHub-Enco--shark-blue?logo=github)](https://github.com/Enco-shark)
@@ -14,19 +14,24 @@
 - **打包（pack）**：将项目文件夹中的所有文件合并成一个 JSON 文件
   - 递归遍历文件夹，读取所有文件内容
   - 记录文件的相对路径、内容、大小、修改时间等信息
-  - 自动识别文本文件和二进制文件（二进制文件使用 Base64 编码）
-  - 支持 `.gitignore` 风格的忽略规则
-  - 显示打包进度条
+  - 自动识别文本文件和二进制文件（扩展名 + 魔数双重检测，二进制使用 Base64 编码）
+  - 支持 `.gitignore` 风格的忽略规则（兼容 gitignore 语义：锚定、`**` 跨目录、取反 `!`）
+  - 流式写入 JSON，避免大项目内存翻倍
+  - 显示打包进度条 + 真实进度回调
 
 - **解包（rebuild）**：从 JSON 文件还原整个项目结构
   - 根据记录的路径和内容重建所有文件和文件夹
-  - 恢复文件时间戳（可选）
-  - 显示重建进度条
+  - 恢复文件时间戳和权限（可选）
+  - 显示重建进度条 + 真实进度回调
+  - **路径遍历防护**：自动拒绝包含 `..`、绝对路径、Windows 盘符的恶意路径
 
 ### 界面版本
 
 - **CLI 版本**：命令行工具，适合脚本和自动化
 - **GUI 版本**：图形界面，基于 Electron + Vue 3，操作更直观
+  - 真实进度推送（通过 IPC 从主进程到渲染进程）
+  - 沙箱隔离 + contextIsolation 安全基线
+  - 自动扫描、主题切换、文件预览
 
 ## 安装
 
@@ -329,6 +334,23 @@ MIT License
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.2.0
+
+- **安全**：路径遍历防护（文件路径 + `source` 字段双重校验）
+- **安全**：移除 JSON 中的 `rootPath` 字段，避免泄露本地绝对路径
+- **安全**：Electron 启用沙箱隔离
+- **功能**：真实进度回调（packer `onProgress`/`onScanProgress`、rebuilder `onProgress`）
+- **功能**：`IgnoreFilter.create()` 异步工厂方法，避免主进程同步 I/O 阻塞
+- **功能**：`maxSize: 0` 表示不限大小
+- **功能**：统一 rebuild dest 行为（总是创建 source 子目录）
+- **性能**：流式 JSON 写入 + 背压处理，避免大项目内存翻倍
+- **性能**：`read-json-info` IPC 分页返回，避免载荷冗余
+- **健壮性**：二进制识别增加魔数检测（PNG/JPEG/ZIP/EXE/ELF 等 13 种）
+- **健壮性**：CLI 参数解析边界校验
+- **健壮性**：压缩率除零保护、formatSize 非法输入保护
+- **测试**：从 1 个端到端测试扩展为 25 个用例（含路径遍历防护测试）
+- **其他**：Font Awesome 本地化、macOS 应用菜单、autoScan 自动扫描
 
 ### v1.1.0
 

@@ -223,11 +223,20 @@ ipcMain.handle('rebuild', async (event, options) => {
   }
 })
 
-// 读取 JSON 文件信息
+// 读取 JSON 文件信息（仅返回前 N 条文件元数据，避免 IPC 载荷过大）
+const JSON_INFO_PREVIEW_LIMIT = 200
+
 ipcMain.handle('read-json-info', async (event, jsonPath) => {
   try {
     const content = await fs.promises.readFile(jsonPath, 'utf-8')
     const data = JSON.parse(content)
+
+    const allFiles = Array.isArray(data.files) ? data.files : []
+    const previewFiles = allFiles.slice(0, JSON_INFO_PREVIEW_LIMIT).map(f => ({
+      path: f.path,
+      size: f.size,
+      encoding: f.encoding,
+    }))
 
     return {
       success: true,
@@ -235,13 +244,11 @@ ipcMain.handle('read-json-info', async (event, jsonPath) => {
         version: data.version,
         createdAt: data.createdAt,
         source: data.source,
-        fileCount: data.fileCount,
+        fileCount: data.fileCount || allFiles.length,
         totalSize: data.totalSize,
-        files: data.files.map(f => ({
-          path: f.path,
-          size: f.size,
-          encoding: f.encoding,
-        })),
+        files: previewFiles,
+        filesTruncated: allFiles.length > JSON_INFO_PREVIEW_LIMIT,
+        filesTotal: allFiles.length,
       },
     }
   } catch (error) {
@@ -255,7 +262,7 @@ ipcMain.handle('scan-directory', async (event, dirPath, maxSize) => {
   const { scanDirectory } = require('../src/packer')
 
   try {
-    const ignoreFilter = new IgnoreFilter({
+    const ignoreFilter = await IgnoreFilter.create({
       projectRoot: dirPath,
     })
 
