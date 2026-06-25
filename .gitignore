@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+release/
+
+# Test output
+test/test-output.json
+test/test-project/
+test/test-restored/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temp files
+*.tmp
+*.temp
+.cache/
+
+# Electron
+electron-dist/
+
+# Package files
+*.tgz
+
+# Environment
+.env
+.env.local
+.env.*.local
