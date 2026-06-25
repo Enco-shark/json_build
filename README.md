@@ -229,21 +229,32 @@ $ json-build rebuild structure.json -d ./restored
 ## 作为模块使用
 
 ```javascript
-const { pack, rebuild } = require('json-build');
+const { pack, rebuild, IgnoreFilter, isTextFile, formatSize } = require('json-build');
 
-// 打包
+// 打包（带进度回调）
 await pack('./my-project', {
   output: 'backup.json',
   ignore: 'temp,cache',
   maxSize: 100, // MB
+  onProgress: (info) => {
+    console.log(`${info.current}/${info.total} ${info.file}`);
+  },
+  onScanProgress: (info) => {
+    console.log(`已扫描 ${info.scanned} 个文件，当前: ${info.current}`);
+  },
 });
 
-// 解包
+// 解包（带进度回调，自动校验路径安全）
 await rebuild('backup.json', {
   dest: './restored',
   timestamps: true,
+  onProgress: (info) => {
+    console.log(`${info.current}/${info.total} ${info.file}`);
+  },
 });
 ```
+
+> 安全说明：`rebuild` 会自动拒绝包含 `..` 段、绝对路径或 Windows 盘符的相对路径，防止路径遍历攻击。
 
 ## 技术栈
 
