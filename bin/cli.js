@@ -37,6 +37,16 @@ function showVersion() {
   console.log(`json-build v${pkg.version}`);
 }
 
+// 从 args 中取下一个值，若不存在则报错
+function nextValue(args, i, flagName) {
+  const val = args[i + 1];
+  if (val === undefined || val.startsWith('-')) {
+    console.error(`错误: ${flagName} 需要一个参数值`);
+    process.exit(1);
+  }
+  return val;
+}
+
 function parseArgs(args) {
   const options = {
     command: null,
@@ -67,15 +77,27 @@ function parseArgs(args) {
     } else if (!options.target) {
       options.target = arg;
     } else if (arg === '-o' || arg === '--output') {
-      options.output = args[++i];
+      options.output = nextValue(args, i, '-o/--output');
+      i++;
     } else if (arg === '-d' || arg === '--dest') {
-      options.dest = args[++i];
+      options.dest = nextValue(args, i, '-d/--dest');
+      i++;
     } else if (arg === '--no-timestamps') {
       options.timestamps = false;
     } else if (arg === '--ignore') {
-      options.ignore = args[++i];
+      options.ignore = nextValue(args, i, '--ignore');
+      i++;
     } else if (arg === '--max-size') {
-      options.maxSize = parseInt(args[++i], 10);
+      const sizeStr = nextValue(args, i, '--max-size');
+      const size = parseInt(sizeStr, 10);
+      if (!Number.isFinite(size) || size <= 0) {
+        console.error(`错误: --max-size 必须是正整数，收到: ${sizeStr}`);
+        process.exit(1);
+      }
+      options.maxSize = size;
+      i++;
+    } else {
+      console.error(`警告: 忽略未知参数 '${arg}'`);
     }
 
     i++;

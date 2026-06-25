@@ -46,7 +46,7 @@ async function pack(targetPath, options = {}) {
   const errors = [];
   let totalSize = 0;
 
-  await scanDirectory(targetPath, targetPath, ignoreFilter, files, errors, maxSize);
+  await scanDirectory(targetPath, targetPath, ignoreFilter, files, errors, maxSize, options.onScanProgress);
 
   spinner.succeed(`扫描完成，发现 ${files.length} 个文件`);
 

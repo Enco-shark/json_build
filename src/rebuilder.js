@@ -8,6 +8,29 @@ const {
   setFileTimestamps,
 } = require('./utils');
 
+// 校验相对路径安全，防止路径遍历攻击
+function isSafeRelativePath(relativePath) {
+  if (typeof relativePath !== 'string' || relativePath === '') {
+    return false;
+  }
+
+  // 统一为正斜杠
+  const normalized = relativePath.replace(/\\/g, '/');
+
+  // 不允许绝对路径（Windows 盘符或 POSIX 根）
+  if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('/')) {
+    return false;
+  }
+
+  // 不允许路径中包含 .. 段
+  const segments = normalized.split('/');
+  if (segments.some(seg => seg === '..')) {
+    return false;
+  }
+
+  return true;
+}
+
 async function rebuild(jsonPath, options = {}) {
   const startTime = Date.now();
   const restoreTimestamps = options.timestamps !== false;
@@ -47,6 +70,9 @@ async function rebuild(jsonPath, options = {}) {
     destPath = path.join(options.dest, structure.source);
   }
 
+  // 解析为绝对路径用于后续安全校验
+  destPath = path.resolve(destPath);
+
   console.log(`  目标目录: ${destPath}`);
   console.log(`  文件数量: ${structure.files.length}`);
   console.log(`  原始大小: ${formatSize(structure.totalSize || 0)}`);
@@ -72,9 +98,38 @@ async function rebuild(jsonPath, options = {}) {
   for (let i = 0; i < structure.files.length; i++) {
     const file = structure.files[i];
     const relativePath = file.path;
-    const fullPath = path.join(destPath, relativePath);
 
     progressBar.increment(1, relativePath);
+
+    // 通知外部进度（用于 GUI IPC）
+    if (options.onProgress) {
+      options.onProgress({
+        current: i + 1,
+        total: structure.files.length,
+        file: relativePath,
+      });
+    }
+
+    // 安全校验：防止路径遍历
+    if (!isSafeRelativePath(relativePath)) {
+      errors.push({
+        file: relativePath,
+        error: '不安全的路径（可能包含 .. 或绝对路径）',
+      });
+      continue;
+    }
+
+    const fullPath = path.join(destPath, relativePath);
+
+    // 二次校验：解析后必须仍在 destPath 之下
+    const resolvedFull = path.resolve(fullPath);
+    if (resolvedFull !== destPath && !resolvedFull.startsWith(destPath + path.sep)) {
+      errors.push({
+        file: relativePath,
+        error: '路径越界，已跳过',
+      });
+      continue;
+    }
 
     try {
       // 确保目录存在
@@ -97,6 +152,15 @@ async function rebuild(jsonPath, options = {}) {
       // 恢复时间戳
       if (restoreTimestamps && file.timestamps) {
         await setFileTimestamps(fullPath, file.timestamps);
+      }
+
+      // 恢复文件权限（如果提供且合理）
+      if (file.mode !== undefined && typeof file.mode === 'number') {
+        try {
+          await fs.promises.chmod(fullPath, file.mode & 0o777);
+        } catch (_e) {
+          // 权限设置失败不阻断流程
+        }
       }
 
       restoredCount++;
@@ -132,4 +196,4 @@ async function rebuild(jsonPath, options = {}) {
   console.log('\n  ✓ 重建完成!\n');
 }
 
-module.exports = { rebuild };
+module.exports = { rebuild, isSafeRelativePath };

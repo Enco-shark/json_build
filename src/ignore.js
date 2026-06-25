@@ -153,8 +153,18 @@ class IgnoreFilter {
       pattern = pattern.slice(0, -1);
     }
 
+    // 处理前导斜杠（锚定到根目录）
+    let anchored = false;
+    if (pattern.startsWith('/')) {
+      anchored = true;
+      pattern = pattern.slice(1);
+    } else if (pattern.includes('/')) {
+      // 包含斜杠但不是开头：gitignore 规范视为锚定到根
+      anchored = true;
+    }
+
     // 转换为正则表达式
-    const regex = this.patternToRegex(pattern);
+    const regex = this.patternToRegex(pattern, anchored);
 
     return {
       original: rule,
@@ -166,23 +176,34 @@ class IgnoreFilter {
   }
 
   // 将 glob 模式转换为正则表达式
-  patternToRegex(pattern) {
+  // anchored=true 表示只匹配从根目录开始的路径
+  // anchored=false 表示匹配任意层级
+  patternToRegex(pattern, anchored) {
     let regex = '';
     let i = 0;
-
-    // 是否匹配路径开头
-    const anchored = pattern.includes('/');
+    // 是否已经处理过开头的 **/
+    let leadingDoubleStar = false;
 
     while (i < pattern.length) {
       const char = pattern[i];
 
       if (char === '*') {
         if (pattern[i + 1] === '*') {
-          // ** 匹配任意路径
-          regex += '.*';
+          // ** 匹配任意路径（包括跨目录）
           i += 2;
           if (pattern[i] === '/') {
-            i++; // 跳过 **/
+            // **/ 表示匹配任意层级目录前缀
+            i++;
+            // 如果是开头，标记为可匹配任意层级
+            if (regex === '') {
+              leadingDoubleStar = true;
+              regex += '(?:.*/)?';
+            } else {
+              regex += '(?:.*/)?';
+            }
+          } else {
+            // ** 在末尾或中间，匹配任意字符（含 /）
+            regex += '.*';
           }
         } else {
           // * 匹配除路径分隔符外的任意字符
@@ -190,7 +211,7 @@ class IgnoreFilter {
           i++;
         }
       } else if (char === '?') {
-        // ? 匹配单个字符
+        // ? 匹配单个字符（不含 /）
         regex += '[^/]';
         i++;
       } else if (char === '[') {
@@ -222,12 +243,12 @@ class IgnoreFilter {
     }
 
     // 构建完整的正则表达式
-    if (anchored) {
-      // 包含 / 的模式匹配完整路径
-      return new RegExp(`(^|/)${regex}(/|$)`, 'i');
+    if (anchored && !leadingDoubleStar) {
+      // 锚定到根：从开头匹配
+      return new RegExp(`^${regex}(?:/|$)`, '');
     } else {
-      // 不包含 / 的模式匹配文件名
-      return new RegExp(`(^|/)${regex}$`, 'i');
+      // 非锚定：在任意层级匹配（路径任意段）
+      return new RegExp(`(^|/)${regex}(?:/|$)`, '');
     }
   }
 

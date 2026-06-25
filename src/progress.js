@@ -80,6 +80,11 @@ class Spinner {
 
   start(text) {
     if (text) this.text = text;
+    // 防止重复 start 导致多个定时器叠加
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
     this.interval = setInterval(() => {
       this.render();
     }, 80);
