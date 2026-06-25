@@ -150,10 +150,16 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useSettings } from '../composables/useSettings'
+
+const { settings } = useSettings()
 
 const jsonPath = ref('')
 const destPath = ref('')
-const restoreTimestamps = ref(true)
+const restoreTimestamps = computed({
+  get: () => settings.restoreTimestamps,
+  set: (val) => { settings.restoreTimestamps = val },
+})
 const jsonInfo = ref(null)
 const showFileList = ref(false)
 const loading = ref(false)

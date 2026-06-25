@@ -165,6 +165,7 @@ ipcMain.handle('read-json-info', async (event, jsonPath) => {
 // 扫描目录预览
 ipcMain.handle('scan-directory', async (event, dirPath) => {
   const { IgnoreFilter } = require('../src/ignore')
+  const { scanDirectory } = require('../src/packer')
 
   try {
     const ignoreFilter = new IgnoreFilter({
@@ -174,7 +175,7 @@ ipcMain.handle('scan-directory', async (event, dirPath) => {
     const files = []
     const errors = []
 
-    await scanDir(dirPath, dirPath, ignoreFilter, files, errors)
+    await scanDirectory(dirPath, dirPath, ignoreFilter, files, errors, 0)
 
     return {
       success: true,
@@ -189,40 +190,3 @@ ipcMain.handle('scan-directory', async (event, dirPath) => {
     return { success: false, error: error.message }
   }
 })
-
-async function scanDir(basePath, currentPath, ignoreFilter, files, errors) {
-  let entries
-
-  try {
-    entries = await fs.promises.readdir(currentPath, { withFileTypes: true })
-  } catch (err) {
-    errors.push({ path: currentPath, error: err.message })
-    return
-  }
-
-  entries.sort((a, b) => a.name.localeCompare(b.name))
-
-  for (const entry of entries) {
-    const fullPath = path.join(currentPath, entry.name)
-    const relativePath = path.relative(basePath, fullPath)
-
-    if (ignoreFilter.shouldIgnore(relativePath, entry.isDirectory())) {
-      continue
-    }
-
-    if (entry.isDirectory()) {
-      await scanDir(basePath, fullPath, ignoreFilter, files, errors)
-    } else if (entry.isFile()) {
-      try {
-        const stat = await fs.promises.stat(fullPath)
-        files.push({
-          path: fullPath,
-          relativePath: relativePath,
-          size: stat.size,
-        })
-      } catch (err) {
-        errors.push({ path: fullPath, error: err.message })
-      }
-    }
-  }
-}

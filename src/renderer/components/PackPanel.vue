@@ -142,17 +142,34 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useSettings } from '../composables/useSettings'
+
+const { settings } = useSettings()
 
 const sourcePath = ref('')
 const outputPath = ref('')
-const maxSize = ref(50)
-const ignoreRules = ref('')
 const previewFiles = ref([])
 const totalSize = ref(0)
 const loading = ref(false)
 const progress = ref(0)
 const statusText = ref('')
 const result = ref(null)
+
+// 从共享设置派生
+const maxSize = computed({
+  get: () => settings.maxSize,
+  set: (val) => { settings.maxSize = val },
+})
+
+const ignoreRules = computed({
+  get: () => settings.ignoreRules.join(', '),
+  set: (val) => {
+    settings.ignoreRules = val
+      .split(',')
+      .map(r => r.trim())
+      .filter(Boolean)
+  },
+})
 
 const canPack = computed(() => {
   return sourcePath.value && outputPath.value

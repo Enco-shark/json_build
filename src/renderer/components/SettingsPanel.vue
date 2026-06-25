@@ -162,24 +162,10 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
+import { useSettings } from '../composables/useSettings'
 
-const defaultSettings = {
-  maxSize: 50,
-  restoreTimestamps: true,
-  autoScan: false,
-  ignoreRules: [
-    'node_modules',
-    '.git',
-    'dist',
-    'build',
-    '.cache',
-    '*.log',
-  ],
-  theme: 'dark',
-}
-
-const settings = reactive({ ...defaultSettings })
+const { settings, defaultSettings, resetSettings: doReset } = useSettings()
 const newRule = ref('')
 const showSaveToast = ref(false)
 
@@ -196,29 +182,15 @@ function removeRule(index) {
 }
 
 function resetSettings() {
-  Object.assign(settings, defaultSettings)
+  doReset()
 }
 
 function saveSettings() {
-  // 保存到 localStorage
-  localStorage.setItem('json-build-settings', JSON.stringify(settings))
-
-  // 显示保存提示
+  // 设置已通过 watch 自动保存，这里仅显示提示
   showSaveToast.value = true
   setTimeout(() => {
     showSaveToast.value = false
   }, 2000)
-}
-
-// 加载设置
-const savedSettings = localStorage.getItem('json-build-settings')
-if (savedSettings) {
-  try {
-    const parsed = JSON.parse(savedSettings)
-    Object.assign(settings, parsed)
-  } catch (e) {
-    // 忽略解析错误
-  }
 }
 </script>
 

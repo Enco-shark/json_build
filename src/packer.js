@@ -86,6 +86,15 @@ async function pack(targetPath, options = {}) {
     const file = files[i];
     progressBar.increment(1, path.relative(targetPath, file.path));
 
+    // 通知外部进度（用于 GUI IPC）
+    if (options.onProgress) {
+      options.onProgress({
+        current: i + 1,
+        total: files.length,
+        file: file.relativePath,
+      });
+    }
+
     try {
       const content = await processFile(file);
       structure.files.push(content);
@@ -171,8 +180,8 @@ async function scanDirectory(basePath, currentPath, ignoreFilter, files, errors,
       try {
         const stat = await fs.promises.stat(fullPath);
 
-        // 检查文件大小
-        if (stat.size > maxSize) {
+        // 检查文件大小（maxSize 为 0 或未设置时跳过过滤）
+        if (maxSize && stat.size > maxSize) {
           errors.push({
             path: fullPath,
             error: `文件过大: ${formatSize(stat.size)}`,
